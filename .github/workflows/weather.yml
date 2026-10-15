@@ -1,0 +1,51 @@
+name: Weather bot
+
+on:
+  schedule:
+    - cron: "50 5 * * *"    # 06:50 Warri time, arrives around 7AM
+    - cron: "50 19 * * *"   # 20:50 Warri time, arrives around 9PM
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Which message to send
+        type: choice
+        options: [morning, evening]
+        default: morning
+      force_fail:
+        description: "Testing only: comma-separated, any of groq, gemini, weather"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Send weather message
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FORCE_FAIL: ${{ inputs.force_fail }}
+          MODE_INPUT: ${{ inputs.mode }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "schedule" ]; then
+            if [ "$(date -u +%H)" -lt 12 ]; then MODE=morning; else MODE=evening; fi
+          else
+            MODE="$MODE_INPUT"
+          fi
+          python weather_bot.py "$MODE"
