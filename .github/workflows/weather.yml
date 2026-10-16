@@ -2,8 +2,8 @@ name: Weather bot
 
 on:
   schedule:
-    - cron: "*/15 * * * *"    # 06:50 Warri time, arrives around 7AM
-    - cron: "50 19 * * *"   # 20:50 Warri time, arrives around 9PM
+    - cron: "50 5 * * *"    # 06:50 Warri time -> morning message
+    - cron: "50 19 * * *"   # 20:50 Warri time -> evening message
   workflow_dispatch:
     inputs:
       mode:
@@ -42,10 +42,14 @@ jobs:
           FORCE_FAIL: ${{ inputs.force_fail }}
           MODE_INPUT: ${{ inputs.mode }}
           EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
         run: |
+          # Scheduled runs: the mode depends on WHICH cron fired, not on the clock.
+          # If you ever change the cron text above, change the match below too.
           if [ "$EVENT" = "schedule" ]; then
-            if [ "$(date -u +%H)" -lt 12 ]; then MODE=morning; else MODE=evening; fi
+            if [ "$SCHEDULE" = "50 5 * * *" ]; then MODE=morning; else MODE=evening; fi
           else
             MODE="$MODE_INPUT"
           fi
+          echo "Running mode: $MODE (trigger: $EVENT)"
           python weather_bot.py "$MODE"
