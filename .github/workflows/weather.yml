@@ -2,7 +2,7 @@ name: Weather bot
 
 on:
   schedule:
-    - cron: "50 5 * * *"    # 06:50 Warri time, arrives around 7AM
+    - cron: "*/15 * * * *"    # 06:50 Warri time, arrives around 7AM
     - cron: "50 19 * * *"   # 20:50 Warri time, arrives around 9PM
   workflow_dispatch:
     inputs:
