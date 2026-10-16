@@ -4,6 +4,7 @@ on:
   schedule:
     - cron: "50 5 * * *"    # 06:50 Warri time -> morning message
     - cron: "50 19 * * *"   # 20:50 Warri time -> evening message
+    - cron: "25 16 * * *"   # TEMPORARY test, 17:25 Warri time (remove after)
   workflow_dispatch:
     inputs:
       mode:
