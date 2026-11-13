@@ -5,6 +5,7 @@ Usage: python weather_bot.py morning|evening
 import argparse
 import json
 import os
+import random
 import re
 import time
 
@@ -26,6 +27,11 @@ MAX_RAIN_MM = 0.3              # mm - traces below this don't matter
 MAX_HUMIDITY = 85              # % - above this, drying is very slow
 
 RETRYABLE = {429, 500, 502, 503, 504}
+
+# HTTP timeouts (seconds). Open-Meteo can be slow under load; 45s is generous.
+WEATHER_TIMEOUT = 45
+AI_TIMEOUT = 30
+TELEGRAM_TIMEOUT = 15
 
 # Testing only: comma-separated list of "groq", "gemini", "weather"
 FORCE_FAIL = {x.strip() for x in os.environ.get("FORCE_FAIL", "").split(",") if x.strip()}
@@ -58,7 +64,7 @@ def send_telegram(text):
         resp = requests.post(
             f"https://api.telegram.org/bot{token}/sendMessage",
             json={"chat_id": chat_id, "text": text},
-            timeout=15,
+            timeout=TELEGRAM_TIMEOUT,
         )
     except requests.exceptions.RequestException as e:
         # "from None" hides the original error, whose text contains the bot URL
@@ -91,12 +97,22 @@ def fetch_weather():
             "precipitation", "wind_speed_10m", "shortwave_radiation",
         ]),
     }
-    resp = requests.get("https://api.open-meteo.com/v1/forecast", params=params, timeout=20)
+    resp = requests.get(
+        "https://api.open-meteo.com/v1/forecast",
+        params=params,
+        timeout=WEATHER_TIMEOUT,
+    )
     resp.raise_for_status()
     return resp.json()
 
 
-def fetch_weather_with_retry(max_attempts=3):
+def fetch_weather_with_retry(max_attempts=4):
+    """Fetch forecast with exponential backoff + jitter.
+
+    4 attempts with waits of ~2-4s, 4-6s, 8-10s. Total added delay is at most
+    about 20s, plus the per-request timeout (45s each). The whole function
+    will not silently swallow the failure: it raises once attempts are done.
+    """
     last = None
     for attempt in range(1, max_attempts + 1):
         try:
@@ -107,7 +123,9 @@ def fetch_weather_with_retry(max_attempts=3):
             last = e
             print(f"Open-Meteo attempt {attempt} failed: {type(e).__name__}")
             if attempt < max_attempts:
-                time.sleep(2 * attempt)
+                wait = (2 ** attempt) + random.uniform(0, 2)
+                print(f"Retrying in {wait:.1f}s...")
+                time.sleep(wait)
     raise RuntimeError(f"Open-Meteo failed after {max_attempts} attempts: {last}")
 
 
@@ -263,7 +281,7 @@ def call_groq(prompt, max_attempts=3):
     for attempt in range(1, max_attempts + 1):
         wait = 2 ** attempt
         try:
-            resp = requests.post(url, headers=headers, json=body, timeout=30)
+            resp = requests.post(url, headers=headers, json=body, timeout=AI_TIMEOUT)
         except requests.exceptions.RequestException as e:
             last_error = f"network error: {type(e).__name__}"
         else:
@@ -301,7 +319,7 @@ def call_gemini(prompt, max_attempts=3):
 
     for attempt in range(1, max_attempts + 1):
         try:
-            resp = requests.post(url, headers=headers, json=body, timeout=30)
+            resp = requests.post(url, headers=headers, json=body, timeout=AI_TIMEOUT)
         except requests.exceptions.RequestException as e:
             last_error = f"network error: {type(e).__name__}"
         else:
