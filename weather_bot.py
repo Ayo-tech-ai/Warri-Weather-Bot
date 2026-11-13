@@ -7,10 +7,17 @@ import json
 import os
 import random
 import re
+import socket
 import time
 
 import pandas as pd
 import requests
+
+# Force IPv4-only for all requests in this process.
+# Prevents urllib3 from trying IPv6 first and hanging on networks where IPv6
+# is advertised but not routable (observed on Google Colab and some CI runners).
+import urllib3.util.connection as urllib3_cn
+urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
 
 # ---------- Settings ----------
 WARRI_LAT = 5.52
